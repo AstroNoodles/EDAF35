@@ -1,0 +1,93 @@
+	printf("--> Trying to write %s, %ld, %zu\n", path, offset, size );
+
+  	// let's figure out the dir entry
+	// skip the "/" in the begining
+	const char* fn = &path[1];
+	// let's figure out the dir entry for the path
+	load_directory();
+	int di = find_dir_entry(fn);
+	if(di < 0) { // no such file
+		printf("    no such file\n");
+		return -ENOENT;
+	}
+  	dir_entry* de = index2dir_entry(di);
+
+	// load the block map
+	unsigned short* bmap = load_blockmap();	
+	
+	// first figure out where the write starts (offset in blocks)
+	unsigned short blkoffs = offset/BLOCK_SIZE;
+	// offset within that block
+	unsigned short byteoffs = offset%BLOCK_SIZE;
+  	// how many bytes to write in this block
+	unsigned short crtsize = min(size, BLOCK_SIZE-byteoffs);
+
+	// Depending on how the blocks in a files are organized, blkoffs needs to
+	// be mapped to a physical disk block. 3rd block in a contiguous mapped file
+	// means the third block in line from the first block. For a file allocated
+	// as a linked list of blocks, this is something like this:
+	unsigned short crtblk = de->first_block;
+	// navigate to the proper block
+	while(blkoffs) {
+		// not yet in the right block.
+		if(bmap[crtblk] != EOF_BLOCK) {
+			// follow the link
+			crtblk = bmap[crtblk];
+		} else {
+			// past the ends of the blocks, need to allocate a new one
+			unsigned short nblk = alloc_block();
+			if(nblk == EOF_BLOCK) {
+				// cannot allocate more, failed
+				printf("   out of free blocks!\n");
+				return -ENOSPC;
+			}
+			// add the new block to the list
+			bmap[crtblk] = nblk;
+			// advance to it
+			crtblk = nblk;
+		}
+		blkoffs--;
+	}
+	// here crtblk should point to the right block
+	printf(" --: start writing at block %u",crtblk);
+
+  char bcache[BLOCK_SIZE];
+  // reads the block into the cache
+  readBlock(crtblk, bcache);
+  / modifies it by writing some bytes from the buffer
+  // TODO: [LARGE_WRITE] this only writes one block! needs to be modified to write all, if
+	// there are more than 1. Consider a while loop around this.
+	// Consider also allocating all new blocks from the start, and then come
+	// back to write them.
+  memcpy(bcache+byteoffs, buffer, crtsize);
+  // write it back
+  writeBlock(crtblk, bcache);
+
+	// ... //
+  // make sure to update the blockl map
+	save_blockmap();
+
+  // how much did we write? lie here to get this running for one block
+  // TODO: [LARGE_WRITE] must make sure to write the full size bytes, which might mean
+  // several blocks
+	return size;
+
+
+
+
+
+Anabelle
+size_t rsize;
+	// ... //
+	// reads the block into the cache, WE NEED TO READ MULTIPLE
+
+	while(size > 0 && bid != EOF_BLOCK) {
+		readBlock(bid, bcache);
+		crtsize = min(size, BLOCK_SIZE-byteoffs);
+
+		memcpy(buffer, bcache+byteoffs, crtsize);
+		size -= crtsize;
+		byteoffs = 0;
+		//bid = bmap[bid];
+		rsize += crtsize;
+	}
