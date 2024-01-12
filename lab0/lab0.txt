@@ -1,1 +1,2 @@
-hey this is a test to see that things work and that I am prepared for Lab 1 on Wednesday
+This lab purely exists to test if you know how to upload this file.
+It only gets much harder from here!
